@@ -19,7 +19,7 @@ from blockchain.transaction import Credential, Transaction
 
 init_state()
 
-st.set_page_config(page_title="Verify Credential - TrustProfile", page_icon="✅", layout="wide")
+
 
 st.header("🔟 Verify Credential")
 

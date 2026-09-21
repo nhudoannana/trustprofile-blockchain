@@ -18,7 +18,7 @@ from blockchain.transaction import Credential, Transaction, verify_transaction
 
 init_state()
 
-st.set_page_config(page_title="Transaction - TrustProfile", page_icon="🔗")
+
 
 st.header("3️⃣ Credential & Transaction")
 

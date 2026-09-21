@@ -22,7 +22,7 @@ from blockchain.merkle import (
 
 init_state()
 
-st.set_page_config(page_title="Merkle Tree - TrustProfile", page_icon="🔗", layout="wide")
+
 
 st.header("5️⃣ Merkle Tree")
 

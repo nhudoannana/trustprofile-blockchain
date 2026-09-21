@@ -22,7 +22,7 @@ from blockchain.mining import mine_block, is_valid_pow
 
 init_state()
 
-st.set_page_config(page_title="Blockchain Explorer - TrustProfile", page_icon="🔗", layout="wide")
+
 
 st.header("6️⃣ Blockchain Explorer")
 

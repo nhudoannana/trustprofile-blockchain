@@ -25,7 +25,7 @@ from blockchain.mempool import Mempool, DummyLedger
 
 init_state()
 
-st.set_page_config(page_title="Attack Simulator - TrustProfile", page_icon="🛡️", layout="wide")
+
 
 st.header("🛡️ Attack Simulator")
 st.caption(

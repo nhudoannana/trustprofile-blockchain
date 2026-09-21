@@ -19,7 +19,7 @@ from blockchain.node import Network
 
 init_state()
 
-st.set_page_config(page_title="Network - TrustProfile", page_icon="🌐", layout="wide")
+
 
 st.header("8️⃣ Network & Full Nodes")
 

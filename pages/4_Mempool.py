@@ -18,7 +18,7 @@ from blockchain.mempool import Mempool, DummyLedger
 
 init_state()
 
-st.set_page_config(page_title="Mempool - TrustProfile", page_icon="🔗")
+
 
 st.header("4️⃣ Mempool — Hàng chờ giao dịch")
 

@@ -15,7 +15,7 @@ from blockchain.wallet import generate_wallet, sign_message, verify_signature
 
 init_state()
 
-st.set_page_config(page_title="Wallet - TrustProfile", page_icon="🔗")
+
 
 st.header("2️⃣ Wallet — Chữ ký số ECDSA")
 

@@ -15,7 +15,7 @@ from blockchain.hash import sha256_hex, bit_difference_percent, bruteforce
 
 init_state()
 
-st.set_page_config(page_title="Hash Demo - TrustProfile", page_icon="🔗")
+
 
 st.header("1️⃣ Hash Demo — SHA-256")
 

@@ -17,7 +17,7 @@ from blockchain.mining import mine_block, is_valid_pow
 
 init_state()
 
-st.set_page_config(page_title="Mining - TrustProfile", page_icon="⛏️")
+
 
 st.header("7️⃣ Proof of Work — Mining")
 
