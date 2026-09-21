@@ -1,27 +1,234 @@
-# TrustProfile
+# TrustProfile — Blockchain-Based Verifiable Profile & Credential System
 
-Hệ thống xác thực chứng nhận số bằng Blockchain — mô phỏng để học (educational simulation).
+> An educational blockchain simulation that demonstrates how digital credentials can be issued, verified, and protected from tampering using SHA-256 hashing, ECDSA digital signatures, Merkle Trees, Proof of Work, and multi-node consensus.
 
-## Mô tả
+## Overview
 
-Issuer ký và phát hành credential cho Holder. Credential trở thành Transaction,
-đi qua Mempool, được Miner đóng gói vào Block bằng Proof of Work,
-các Full Node xác minh và đồng thuận. Verifier nhập Credential ID để kiểm tra.
+TrustProfile models a complete credential lifecycle on a simplified blockchain:
 
-## Cài đặt
+1. An **Issuer** creates a digital credential for a **Holder** (e.g., a university degree).
+2. The credential is packaged into a **Transaction** and signed with an **ECDSA (SECP256K1) digital signature**.
+3. A **Node** validates the transaction (format, signature, issuer registry, credential status) before accepting it into its **Mempool**.
+4. A **Miner** packages valid transactions into a **Block**, computing a **Merkle Root** and solving a **Proof of Work** puzzle.
+5. **Three full nodes** independently validate, broadcast, and reach consensus on the blockchain state.
+6. A **Verifier** can check any credential by its Credential ID through a 12-step verification process.
+7. An **Attack Simulator** demonstrates six classes of tampering and shows exactly which protection layer detects each one.
+
+> **Note:** This is an educational simulation built for an academic blockchain course. It does not connect to any public blockchain, does not use real cryptocurrency, and is not designed for production use.
+
+## Project Objectives
+
+Demonstrate the end-to-end flow of blockchain-based credential management:
+
+```
+SHA-256 → Digital Signature → Transaction → Mempool → Merkle Tree
+  → Block → Proof of Work → Network → Consensus → Credential Verification → Attack Detection
+```
+
+## Key Features
+
+| Feature | Description |
+|---|---|
+| SHA-256 Hashing | Hash generation, Avalanche Effect comparison, brute-force simulation |
+| ECDSA Wallets | Key pair generation (SECP256K1), message signing, signature verification |
+| Credential Transactions | Issue and Revoke transactions with canonical JSON hashing |
+| Transaction Validation | 5-step mempool validation (format, signature, duplicate, registry, ledger status) |
+| Merkle Tree | Tree construction, Merkle Root calculation, Merkle Proof generation and verification |
+| Block & Blockchain | Block creation with 6-field header, chain validation (hash linkage, Merkle Root, PoW) |
+| Proof of Work | Nonce-based mining with configurable difficulty (2–5), benchmark comparison |
+| Multi-Node Network | Three full nodes with independent blockchain, mempool, and daemon worker threads |
+| Mining & Consensus | End-to-end flow: TX → Mempool → Mine → Block broadcast → Node validation → Consensus |
+| Credential Verification | 12-step verification with pass/fail detail for each step |
+| Credential Revocation | Revoke credentials via REVOKE transactions (Mempool → Mine → Blockchain) |
+| Attack Simulator | Six tamper scenarios running on deep copies, each showing which layer catches the attack |
+
+## Technology Stack
+
+| Component | Version / Detail |
+|---|---|
+| Python | 3.13.7 |
+| Streamlit | ≥ 1.30.0 (tested with 1.64.0) |
+| cryptography | ≥ 42.0.0 (ECDSA SECP256K1) |
+| pytest | ≥ 8.0.0 |
+| Standard library | `hashlib`, `json`, `threading`, `queue`, `copy`, `time`, `datetime` |
+
+No database is used. All data is stored in memory.
+
+## Installation (Windows)
 
 ```bash
+git clone https://github.com/nhudoannana/trustprofile-blockchain.git
+cd trustprofile-blockchain
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Chạy
+> **PowerShell users:** If script execution is blocked, run `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` or activate the virtual environment from Command Prompt (`cmd`) instead.
+
+## Running the Application
 
 ```bash
 streamlit run app.py
 ```
 
-## Chạy test
+Streamlit typically opens at `http://localhost:8501` in the default browser.
+
+## Running the Tests
 
 ```bash
-pytest tests/ -v
+python -m pytest -v
 ```
+
+Latest test run: **51 passed, 0 failed, 0 skipped, 0 warnings** (Python 3.13.7, pytest 8.3.3).
+
+## Project Structure
+
+```
+trustprofile/
+├── app.py                          # Streamlit entry point — Dashboard + st.navigation
+├── state.py                        # Session state initialization + shared Network (cache_resource)
+├── requirements.txt
+├── README.md
+├── DEMO_SCRIPT.md
+│
+├── blockchain/                     # Core engine (no Streamlit dependency)
+│   ├── __init__.py
+│   ├── hash.py                     # sha256_hex, bit_difference_percent, bruteforce
+│   ├── wallet.py                   # Wallet dataclass, generate_wallet, sign/verify
+│   ├── transaction.py              # Credential dataclass, Transaction class, verify_transaction
+│   ├── mempool.py                  # Mempool class (5-step validation), DummyLedger
+│   ├── merkle.py                   # build_merkle_tree, merkle root/proof/verify
+│   ├── block.py                    # BlockHeader dataclass (6 fields), Block class
+│   ├── blockchain.py               # Blockchain class — chain management, credential ledger, 12-step verify
+│   ├── mining.py                   # mine_block (PoW), is_valid_pow
+│   └── node.py                     # Node class (worker thread), Network class (broadcast, event log)
+│
+├── pages/                          # Streamlit pages (loaded via st.navigation)
+│   ├── 1_Hash_Demo.py              # SHA-256 — hash, Avalanche Effect, brute-force
+│   ├── 2_Wallet.py                 # Wallet creation, signing, verification, tamper demo
+│   ├── 3_Transaction.py            # Credential + Transaction creation, signing, validation
+│   ├── 4_Mempool.py                # Mempool management, attack demos (tampered, unauthorized, duplicate)
+│   ├── 5_Merkle.py                 # Merkle Tree visualization, tamper detection, Merkle Proof
+│   ├── 6_Explorer.py               # Blockchain Explorer — block detail, tamper & recompute demo
+│   ├── 7_Mining.py                 # PoW mining, difficulty benchmark
+│   ├── 8_Network.py                # 3-node status, TX broadcast, online/offline, sync
+│   ├── 9_Mining_Flow.py            # End-to-end: Submit TX → Mine → Consensus
+│   ├── 10_Verify.py                # 12-step credential verification, revocation, history
+│   └── 11_Attacks.py               # 6 attack scenarios on deep copies
+│
+├── tests/                          # pytest test suite (51 tests)
+│   ├── __init__.py
+│   ├── test_hash.py                # 9 tests
+│   ├── test_wallet.py              # 4 tests
+│   ├── test_transaction.py         # 6 tests
+│   ├── test_mempool.py             # 5 tests
+│   ├── test_merkle.py              # 6 tests
+│   ├── test_blockchain.py          # 6 tests
+│   ├── test_mining.py              # 5 tests
+│   ├── test_node.py                # 4 tests
+│   ├── test_consensus.py           # 3 tests
+│   └── test_verify.py              # 3 tests
+│
+├── pages_archive/                  # Archived placeholder pages from initial scaffold
+│   └── (6 placeholder files)
+│
+└── docs/
+    └── images/                     # Screenshots (to be added after final UI review)
+```
+
+## Implementation Map: P1–P11
+
+| Project Item | Topic | Implementation File(s) | Demo Page | Test File(s) | Status |
+|---|---|---|---|---|---|
+| P1 | SHA-256 Hash | `blockchain/hash.py` | SHA-256 (`1_Hash_Demo.py`) | `test_hash.py` (9 tests) | ✅ Implemented |
+| P2 | Block Structure | `blockchain/block.py` | Blockchain Explorer (`6_Explorer.py`) | `test_blockchain.py` (6 tests) | ✅ Implemented |
+| P3 | ECDSA Digital Signature | `blockchain/wallet.py` | Wallet & Digital Signature (`2_Wallet.py`) | `test_wallet.py` (4 tests) | ✅ Implemented |
+| P4 | Transaction & Mempool | `blockchain/transaction.py`, `blockchain/mempool.py` | Credentials & Transactions (`3_Transaction.py`), Mempool (`4_Mempool.py`) | `test_transaction.py` (6), `test_mempool.py` (5) | ✅ Implemented |
+| P5 | Merkle Tree | `blockchain/merkle.py` | Merkle Tree (`5_Merkle.py`) | `test_merkle.py` (6 tests) | ✅ Implemented |
+| P6 | Block Header (6 fields) | `blockchain/block.py` | Blockchain Explorer (`6_Explorer.py`) | `test_blockchain.py` (6 tests) | ✅ Implemented |
+| P7 | Proof of Work | `blockchain/mining.py` | Proof of Work / Mining (`7_Mining.py`) | `test_mining.py` (5 tests) | ✅ Implemented |
+| P8 | P2P Network | `blockchain/node.py` | Network (`8_Network.py`) | `test_node.py` (4 tests) | ✅ Implemented |
+| P9 | Mining & Consensus | `blockchain/node.py`, `blockchain/blockchain.py` | Mining & Consensus Flow (`9_Mining_Flow.py`) | `test_consensus.py` (3 tests) | ✅ Implemented |
+| P10 | Fork / Chain Split | `blockchain/node.py` (`_handle_block`, `_handle_sync_response`) | Network (`8_Network.py`) | No dedicated test | Partially implemented |
+| P11 | Attack Simulator | `pages/11_Attacks.py` | Attack Simulator (`11_Attacks.py`) | No dedicated test (attacks run on UI deep copies) | ✅ Implemented |
+
+**P10 Note:** The system detects a `previous_hash` mismatch and triggers `sync_chain`, which applies the longest-valid-chain rule. It does not implement full fork resolution (e.g., comparing competing chains at equal height, orphan block storage, or chain reorganization). This is a deliberate simplification for educational purposes.
+
+## End-to-End Demo Flow
+
+1. **Create an Issuer wallet** — Open *Wallet & Digital Signature*, enter a name (e.g., "Demo University"), click *Generate Wallet*.
+2. **Create and sign a credential transaction** — Open *Mining & Consensus Flow*, select the Issuer wallet, fill in Credential ID / Holder / Title, click *Create → Sign → Submit → Broadcast*.
+3. **Broadcast the transaction** — The transaction is automatically broadcast to all online nodes upon submission.
+4. **Inspect the mempool** — Open *Network*, expand a node's detail to see pending transactions in its mempool.
+5. **Mine a block** — On *Mining & Consensus Flow*, select a miner node, set difficulty, click *Mine Block*.
+6. **Confirm consensus** — After mining, the status table shows all three nodes with the same Height and Tip Hash.
+7. **Verify the credential** — Open *Verify Credential*, enter the Credential ID, click *Verify*. A 12-step verification report appears.
+8. **Attack Simulator** — Open *Attack Simulator*, run any of the six scenarios to see which protection layer detects the tamper.
+
+## Test Coverage
+
+| Test File | Module Tested | Tests |
+|---|---|---|
+| `test_hash.py` | `blockchain/hash.py` | 9 |
+| `test_wallet.py` | `blockchain/wallet.py` | 4 |
+| `test_transaction.py` | `blockchain/transaction.py` | 6 |
+| `test_mempool.py` | `blockchain/mempool.py` | 5 |
+| `test_merkle.py` | `blockchain/merkle.py` | 6 |
+| `test_blockchain.py` | `blockchain/block.py`, `blockchain/blockchain.py` | 6 |
+| `test_mining.py` | `blockchain/mining.py` | 5 |
+| `test_node.py` | `blockchain/node.py` | 4 |
+| `test_consensus.py` | End-to-end consensus flow | 3 |
+| `test_verify.py` | Credential verification & revocation | 3 |
+| **Total** | | **51** |
+
+The Attack Simulator (`pages/11_Attacks.py`) runs six tamper scenarios interactively on deep copies of the blockchain. These are demonstrated through the UI and do not have a separate pytest file.
+
+## Project Limitations
+
+- **In-memory storage.** All blockchain data, wallets, and mempool state reside in memory and are lost when the Streamlit process restarts.
+- **Simulated network.** Node communication uses in-process queues; port numbers (5001/5002/5003) are logical labels and no real TCP sockets are opened.
+- **No public blockchain.** The project does not connect to any external blockchain or use real cryptocurrency.
+- **Simplified consensus.** Fork handling uses a longest-valid-chain replacement strategy triggered by `previous_hash` mismatch. Full fork resolution, orphan block management, and chain reorganization are not implemented.
+- **No privacy controls.** Credential data is stored in plaintext in the blockchain. Sensitive personal information should not be placed on a public blockchain without additional privacy mechanisms.
+- **Authenticity, not truth.** The blockchain can prove who signed a credential and whether the data has been altered. It cannot independently verify that the original credential content was factually correct.
+- **Educational purpose only.** This application is not designed for production use.
+
+## Team Members and Responsibilities
+
+| No. | Team Member | Student ID | Role | Assigned Area |
+|---:|---|---|---|---|
+| 1 | Phạm Thị Hồng Thắm | 031340240027 | Cryptography Engineer | P1 — SHA-256; P3 — ECDSA Digital Signature; P5 — Merkle Tree and Merkle Proof |
+| 2 | Đoàn Nguyễn Quỳnh Như | 031340240021 | **Team Leader & Blockchain Engineer** | P2 — Block Structure; P6 — Block Header; P7 — Proof of Work; repository coordination |
+| 3 | Cai Thị Thảo Nguyên | 031340240019 | Node & Network Lead | P8 — P2P Network and Multi-Node Simulation |
+| 4 | Kiều Thị Yến Nhi | 031340240020 | Mempool & Consensus Engineer | P4 — Transaction Validation and Mempool; P9 — Mining and Distributed Consensus |
+| 5 | Huỳnh Thị Tuyết Mai | 031340240016 | Documentation & Report Member | Project report and technical documentation |
+| 6 | Trần Quỳnh Ngọc Thảo | 031340240026 | Documentation Support Member | Documentation review and presentation support |
+| 7 | Nguyễn Lê Phạm Lộc | 031340240015 | QA & Demo Lead | Testing, demo scenario, video preparation, and P11 — Attack Simulator |
+
+## Screenshots
+
+> Screenshots will be added after the final UI review. The following placeholders indicate which views will be captured.
+
+<!--
+![Dashboard](docs/images/dashboard.png)
+![Wallet and Digital Signature](docs/images/wallet-signature.png)
+![Mining](docs/images/mining.png)
+![Network Consensus](docs/images/network-consensus.png)
+![Credential Verification](docs/images/verify-credential.png)
+![Attack Simulator](docs/images/attack-simulator.png)
+-->
+
+| View | Path |
+|---|---|
+| Dashboard | `docs/images/dashboard.png` |
+| Wallet & Digital Signature | `docs/images/wallet-signature.png` |
+| Mining | `docs/images/mining.png` |
+| Network Consensus | `docs/images/network-consensus.png` |
+| Credential Verification | `docs/images/verify-credential.png` |
+| Attack Simulator | `docs/images/attack-simulator.png` |
+
+## Educational Notice
+
+This repository was developed as a group project for an academic blockchain course. It demonstrates core blockchain mechanisms — hashing, digital signatures, Merkle Trees, Proof of Work, peer-to-peer consensus, and tamper detection — in a controlled simulation environment. It is not intended for production use or real-world credential issuance.
