@@ -70,16 +70,25 @@ def _show_block(block, validation_status=None):
 
     with st.expander(label, expanded=(validation_status is False)):
         col1, col2 = st.columns(2)
+        is_pos = block.header.consensus_type == "PoS"
         with col1:
             st.markdown(f"**Height:** {block.height}")
             st.markdown(f"**Timestamp:** `{block.header.timestamp}`")
-            st.markdown(f"**Difficulty:** {block.header.difficulty}")
-            st.markdown(f"**Nonce:** {block.header.nonce:,}")
+            st.markdown(f"**Consensus:** {'🪙 Proof of Stake' if is_pos else '⛏️ Proof of Work'}")
+            if is_pos:
+                st.markdown(f"**Validator:** `{block.header.validator_address[:16]}…`")
+            else:
+                st.markdown(f"**Difficulty:** {block.header.difficulty}")
+                st.markdown(f"**Nonce:** {block.header.nonce:,}")
         with col2:
             st.markdown(f"**Version:** {block.header.version}")
             st.markdown(f"**Transactions:** {block.transaction_count}")
-            pow_ok = is_valid_pow(block)
-            st.markdown(f"**PoW valid:** {'✅' if pow_ok else '❌'}")
+            if is_pos:
+                sig_ok = bool(block.header.validator_signature)
+                st.markdown(f"**Chữ ký PoS:** {'✅ Hợp lệ' if sig_ok else '❌ Thiếu'}")
+            else:
+                pow_ok = is_valid_pow(block)
+                st.markdown(f"**PoW valid:** {'✅' if pow_ok else '❌'}")
 
         st.markdown(f"**Hash:** `{block_hash}`")
         st.markdown(f"**Previous Hash:** `{block.header.previous_hash}`")
@@ -118,15 +127,21 @@ def _validate_per_block(bc):
                 results[i] = (False, f"previous_hash không khớp hash Block {i - 1}")
                 continue
 
-            # Proof of Work
-            if not is_valid_pow(block):
-                block_hash = block.compute_hash()
-                results[i] = (
-                    False,
-                    f"PoW không hợp lệ (hash={block_hash[:12]}…, "
-                    f"cần {block.header.difficulty} số '0' đầu)",
-                )
-                continue
+            # Kiểm tra cơ chế đồng thuận
+            if block.header.consensus_type == "PoS":
+                if not block.header.validator_address or not block.header.validator_signature:
+                    results[i] = (False, "Khối PoS thiếu chữ ký số hoặc địa chỉ của Validator")
+                    continue
+            else:
+                # Proof of Work
+                if not is_valid_pow(block):
+                    block_hash = block.compute_hash()
+                    results[i] = (
+                        False,
+                        f"PoW không hợp lệ (hash={block_hash[:12]}…, "
+                        f"cần {block.header.difficulty} số '0' đầu)",
+                    )
+                    continue
 
         results[i] = (True, "OK")
 

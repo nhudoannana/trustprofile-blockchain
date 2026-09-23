@@ -26,6 +26,23 @@ class Credential:
     title: str
     issue_date: str
     claims: dict = field(default_factory=dict)
+    claims_root: str = ""
+
+    def to_onchain_payload(self) -> dict:
+        """Chuyển thành payload đưa lên blockchain.
+
+        Theo nguyên lý bảo vệ quyền riêng tư & Selective Disclosure:
+        Chỉ lưu metadata và duy nhất claims_root lên blockchain,
+        KHÔNG lưu dữ liệu claims chi tiết hay salt on-chain.
+        """
+        return {
+            "credential_id": self.credential_id,
+            "issuer_name": self.issuer_name,
+            "holder_name": self.holder_name,
+            "title": self.title,
+            "issue_date": self.issue_date,
+            "claims_root": self.claims_root,
+        }
 
 
 class Transaction:

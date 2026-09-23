@@ -264,5 +264,17 @@ with st.expander("💬 Câu hỏi thảo luận"):
         Với 1.000.000 giao dịch: chỉ cần **20 hash** thay vì 1 triệu.
         Đây là lý do Bitcoin SPV (Simplified Payment Verification) hoạt động
         trên thiết bị di động mà không cần tải toàn bộ blockchain.
+
+        ---
+
+        **3. Cây Merkle cho Claims (Selective Disclosure) khác gì Merkle Tree của Block?**
+
+        - **Merkle Tree của Block:** Gom các Transaction thành Merkle Root lưu trong Block Header.
+        - **Merkle Tree cho Claims (trong Credential):** Mỗi lá là một claim được băm kèm **Salt ngẫu nhiên 128-bit**:
+          `leaf_hash = sha256(claim_name + ':' + claim_value + ':' + salt)`.
+        - **Vì sao cần Salt?** Ngăn chặn tấn công từ điển / dò băm đối với các claim có ít khả năng như `Grade A`.
+        - Chỉ có `claims_root` nằm on-chain. Holder gửi cho Verifier một claim cùng salt và proof. Verifier đối soát được mà không thấy các claim khác.
+        - **Thuật ngữ chuẩn:** Đây là **Proof of Inclusion**, KHÔNG PHẢI Zero-Knowledge Proof (ZKP).
         """
     )
+

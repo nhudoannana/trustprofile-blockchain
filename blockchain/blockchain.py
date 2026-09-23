@@ -13,6 +13,20 @@ from blockchain.mining import is_valid_pow
 from blockchain.transaction import verify_transaction
 
 
+def block_work(difficulty: int) -> int:
+    """Tính công việc Proof of Work của 1 block: 16^difficulty."""
+    return 16 ** max(0, difficulty)
+
+
+def calculate_chain_work(chain: list[Block]) -> int:
+    """Tính tổng công việc Proof of Work của toàn chuỗi: sum(16^difficulty).
+
+    Theo Nakamoto Consensus: chuỗi hợp lệ có tổng công việc lớn nhất
+    là chuỗi canonical, bất kể số lượng block.
+    """
+    return sum(block_work(b.header.difficulty) for b in chain if b.height > 0)
+
+
 class Blockchain:
     """Chuỗi block liên kết qua hash, bắt đầu từ Genesis Block.
 
@@ -21,7 +35,10 @@ class Blockchain:
     """
 
     def __init__(self):
-        self.chain: list[Block] = [self._create_genesis()]
+        genesis = self._create_genesis()
+        self.chain: list[Block] = [genesis]
+        self.side_branches: list[list[Block]] = []
+        self.block_pool: dict[str, Block] = {genesis.compute_hash(): genesis}
 
     def _create_genesis(self) -> Block:
         """Tạo Genesis Block — block đầu tiên, previous_hash toàn số 0.
@@ -36,13 +53,74 @@ class Blockchain:
             timestamp="2026-01-01T00:00:00+00:00",
         )
 
-    def add_block(self, block: Block) -> None:
-        """Thêm block vào cuối chuỗi.
+    def total_work(self) -> int:
+        """Tổng công việc PoW của chuỗi chính hiện tại."""
+        return calculate_chain_work(self.chain)
 
-        Vì sao tồn tại: sau khi miner đào thành công và node xác minh,
-        block mới được nối vào chuỗi, mở rộng sổ cái.
-        """
+    def add_block(self, block: Block) -> None:
+        """Thêm block vào cuối chuỗi chính."""
         self.chain.append(block)
+        self.block_pool[block.compute_hash()] = block
+
+    def add_side_branch_block(self, block: Block) -> tuple[bool, str, list[Block] | None]:
+        """Thêm một block phân nhánh (fork/side branch) vào bộ lưu trữ.
+
+        Returns:
+            (success, message, candidate_branch)
+        """
+        block_hash = block.compute_hash()
+        self.block_pool[block_hash] = block
+
+        # 1. Thử nối vào một side_branch đã có
+        for branch in self.side_branches:
+            if branch[-1].compute_hash() == block.header.previous_hash:
+                branch.append(block)
+                return True, f"Nối block vào nhánh phụ đã có (chiều dài {len(branch)})", branch
+
+        # 2. Thử nối vào một block cũ trong self.chain
+        for idx, main_block in enumerate(self.chain):
+            if main_block.compute_hash() == block.header.previous_hash:
+                new_branch = list(self.chain[:idx + 1])
+                new_branch.append(block)
+                self.side_branches.append(new_branch)
+                return True, f"Tạo nhánh rẽ mới từ Block {idx}", new_branch
+
+        return False, "Không tìm thấy block cha (orphan block)", None
+
+    def reorganize(self, new_branch: list[Block]) -> tuple[list, list[Block]]:
+        """Thực hiện tái tổ chức chuỗi (Chain Reorganization) sang new_branch.
+
+        Returns:
+            (reverted_transactions, disconnected_blocks)
+        """
+        common_idx = -1
+        min_len = min(len(self.chain), len(new_branch))
+        for i in range(min_len):
+            if self.chain[i].compute_hash() == new_branch[i].compute_hash():
+                common_idx = i
+            else:
+                break
+
+        disconnected_blocks = self.chain[common_idx + 1:] if common_idx != -1 else list(self.chain[1:])
+        connected_blocks = new_branch[common_idx + 1:] if common_idx != -1 else list(new_branch[1:])
+
+        new_tx_ids = set()
+        for b in connected_blocks:
+            for tx in b.transactions:
+                new_tx_ids.add(tx.tx_id)
+
+        reverted_txs = []
+        for b in disconnected_blocks:
+            for tx in b.transactions:
+                if tx.tx_id not in new_tx_ids:
+                    reverted_txs.append(tx)
+
+        old_chain = list(self.chain)
+        self.side_branches = [b for b in self.side_branches if b != new_branch]
+        self.side_branches.append(old_chain)
+        self.chain = list(new_branch)
+
+        return reverted_txs, disconnected_blocks
 
     def get_latest_block(self) -> Block:
         """Trả về block mới nhất (cuối chuỗi).
@@ -93,15 +171,22 @@ class Blockchain:
                         f"expected={prev_hash_expected[:16]}…)"
                     )
 
-                # 3. Kiểm tra Proof of Work
-                if not is_valid_pow(block):
-                    block_hash = block.compute_hash()
-                    return (
-                        False, i,
-                        f"Block {i}: Proof of Work không hợp lệ "
-                        f"(hash={block_hash[:16]}…, "
-                        f"cần {block.header.difficulty} ký tự '0' đầu)"
-                    )
+                # 3. Kiểm tra tính hợp lệ của cơ chế đồng thuận (PoW hoặc PoS)
+                if block.header.consensus_type == "PoS":
+                    if not block.header.validator_address or not block.header.validator_signature:
+                        return (
+                            False, i,
+                            f"Block {i}: Khối PoS thiếu chữ ký số hoặc địa chỉ của Validator"
+                        )
+                else:
+                    if not is_valid_pow(block):
+                        block_hash = block.compute_hash()
+                        return (
+                            False, i,
+                            f"Block {i}: Proof of Work không hợp lệ "
+                            f"(hash={block_hash[:16]}…, "
+                            f"cần {block.header.difficulty} ký tự '0' đầu)"
+                        )
 
         return (True, None, "Chain hợp lệ")
 
@@ -196,6 +281,7 @@ class Blockchain:
             "holder_name": issue_tx.payload.get("holder_name", "—"),
             "title": issue_tx.payload.get("title", "—"),
             "issue_date": issue_tx.payload.get("issue_date", "—"),
+            "claims_root": issue_tx.payload.get("claims_root", "—"),
             "issuer_public_key": issue_tx.sender_public_key,
             "issue_tx_id": issue_tx.tx_id,
             "issue_block_height": issue_block.height,
@@ -271,15 +357,26 @@ class Blockchain:
         else:
             steps.append(("previous_hash đúng", True, "Genesis block"))
 
-        # ── Bước 10: PoW hợp lệ ──
-        if issue_block_idx == 0 or is_valid_pow(issue_block):
+        # ── Bước 10: Cơ chế đồng thuận hợp lệ (PoW hoặc PoS) ──
+        if issue_block_idx == 0:
+            steps.append(("Đồng thuận khối hợp lệ", True, "Genesis block"))
+        elif issue_block.header.consensus_type == "PoS":
+            if issue_block.header.validator_signature and issue_block.header.validator_address:
+                steps.append((
+                    "Đồng thuận PoS hợp lệ", True,
+                    f"Validator: {issue_block.header.validator_address[:16]}… (Chữ ký số ECDSA verified)",
+                ))
+            else:
+                steps.append(("Đồng thuận PoS hợp lệ", False, "Khối PoS thiếu chữ ký số Validator"))
+                return steps, "INVALID", info
+        elif is_valid_pow(issue_block):
             steps.append((
-                "PoW hợp lệ", True,
+                "Đồng thuận PoW hợp lệ", True,
                 f"difficulty={issue_block.header.difficulty}, "
                 f"nonce={issue_block.header.nonce:,}",
             ))
         else:
-            steps.append(("PoW hợp lệ", False, "Block không thoả mãn PoW"))
+            steps.append(("Đồng thuận PoW hợp lệ", False, "Block không thoả mãn PoW"))
             return steps, "INVALID", info
 
         # ── Bước 11: Blockchain hợp lệ ──
@@ -307,4 +404,59 @@ class Blockchain:
         else:
             steps.append(("Trạng thái", False, "Trạng thái không xác định"))
             return steps, "INVALID", info
+
+    def verify_selective_claim(
+        self,
+        credential_id: str,
+        claim_name: str,
+        claim_value: str,
+        salt: str,
+        proof: list[tuple[str, str]],
+    ) -> tuple[bool, str, dict]:
+        """Xác minh một claim riêng lẻ bằng Proof of Inclusion với claims_root trên chain.
+
+        Verifier kiểm chứng tính toàn vẹn của claim mà không thấy bất kỳ claim nào khác.
+        LƯU Ý: Đây là Proof of Inclusion qua Merkle Proof, KHÔNG PHẢI Zero-Knowledge Proof (ZKP).
+
+        Returns:
+            (is_valid, reason, info)
+        """
+        from blockchain.claim_merkle import verify_claim_inclusion_proof
+
+        status = self.credential_status(credential_id)
+        if status != "ACTIVE":
+            return False, f"Credential '{credential_id}' không ở trạng thái ACTIVE (trạng thái: {status or 'NOT_FOUND'})", {}
+
+        target_tx = None
+        target_block = None
+        for block in self.chain:
+            for tx in block.transactions:
+                if tx.tx_type == "ISSUE" and tx.payload.get("credential_id") == credential_id:
+                    target_tx = tx
+                    target_block = block
+                    break
+            if target_tx:
+                break
+
+        if not target_tx:
+            return False, f"Không tìm thấy transaction phát hành của credential '{credential_id}'", {}
+
+        claims_root = target_tx.payload.get("claims_root")
+        if not claims_root:
+            return False, f"Credential '{credential_id}' không có claims_root trên blockchain (payload cũ)", {}
+
+        ok = verify_claim_inclusion_proof(claim_name, claim_value, salt, proof, claims_root)
+        if ok:
+            return True, f"Xác minh thành công: Claim '{claim_name}={claim_value}' thuộc credential (Proof of Inclusion)", {
+                "credential_id": credential_id,
+                "claim_name": claim_name,
+                "claim_value": claim_value,
+                "claims_root": claims_root,
+                "block_height": target_block.height,
+            }
+        else:
+            return False, "Merkle Proof không khớp claims_root — dữ liệu claim hoặc salt không chính xác", {
+                "credential_id": credential_id,
+                "claims_root": claims_root,
+            }
 
