@@ -38,6 +38,17 @@ def mine_block(block) -> dict:
         nonce += 1
 
 
+# Mức difficulty tối thiểu mà mạng chấp nhận cho block PoW.
+# difficulty=0 nghĩa là "không cần đào" — nếu không chặn, kẻ tấn công có thể
+# gắn consensus_type="PoW", difficulty=0 để né cả PoW lẫn kiểm tra Validator của PoS.
+MIN_POW_DIFFICULTY = 1
+
+
+def is_acceptable_pow(block) -> bool:
+    """PoW hợp lệ VÀ đạt mức difficulty tối thiểu của mạng."""
+    return block.header.difficulty >= MIN_POW_DIFFICULTY and is_valid_pow(block)
+
+
 def is_valid_pow(block) -> bool:
     """Kiểm tra block đã thoả mãn Proof of Work chưa.
 

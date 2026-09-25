@@ -46,7 +46,9 @@ cred_id = st.text_input("Nhập Credential ID:", value="", key="verify_cred_id",
 
 if st.button("🔍 Verify", key="btn_verify") and cred_id.strip():
     cred_id = cred_id.strip()
-    steps, final_status, info = bc.verify_credential(cred_id)
+    steps, final_status, info = bc.verify_credential(
+        cred_id, pos_registry=get_network().pos_registry
+    )
 
     # Hiển thị từng bước
     st.markdown("#### Kết quả kiểm tra 12 bước:")

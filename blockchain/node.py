@@ -16,7 +16,7 @@ from blockchain.block import Block
 from blockchain.blockchain import Blockchain, calculate_chain_work, block_work
 from blockchain.mempool import Mempool
 from blockchain.merkle import calculate_merkle_root
-from blockchain.mining import mine_block, is_valid_pow
+from blockchain.mining import mine_block, is_valid_pow, is_acceptable_pow, MIN_POW_DIFFICULTY
 from blockchain.transaction import verify_transaction
 
 
@@ -352,12 +352,13 @@ class Node:
                 )
                 return
         else:
-            # Kiểm tra Proof of Work
-            if not is_valid_pow(block):
+            # Kiểm tra Proof of Work (+ difficulty tối thiểu, chống né đồng thuận bằng difficulty=0)
+            if not is_acceptable_pow(block):
                 self.network.log_event(
                     self.node_id,
                     f"❌ BLOCK REJECTED from {msg.sender_id}: "
-                    f"PoW không hợp lệ (cần {block.header.difficulty} số '0' đầu)",
+                    f"PoW không hợp lệ (difficulty={block.header.difficulty}, "
+                    f"tối thiểu {MIN_POW_DIFFICULTY}, cần đủ số '0' đầu)",
                 )
                 return
 
@@ -467,7 +468,7 @@ class Node:
         peer_work = peer_bc.total_work()
         my_work = self.blockchain.total_work()
 
-        if peer_work <= my_work and len(peer_bc.chain) <= len(self.blockchain.chain):
+        if peer_work <= my_work:
             self.network.log_event(
                 self.node_id,
                 f"SYNC SKIP from {msg.sender_id}: "
@@ -475,7 +476,9 @@ class Node:
             )
             return
 
-        ok, _, reason = peer_bc.is_chain_valid()
+        ok, _, reason = peer_bc.is_chain_valid(
+            pos_registry=getattr(self.network, "pos_registry", None)
+        )
         if ok:
             reverted_txs, disconnected_blocks = self.blockchain.reorganize(peer_bc.chain)
             for r_tx in reverted_txs:

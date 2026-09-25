@@ -49,6 +49,8 @@ class PoSRegistry:
         self.validators: dict[str, Validator] = {}
         self.stake_mode = default_mode  # "TIERED" | "CUMULATIVE" | "HYBRID"
         self.bonus_per_credential = bonus_per_credential
+        # Bằng chứng ký kép đã xử lý — chống replay (phạt lặp lại cùng 1 cặp block)
+        self.slashed_evidence: set[frozenset[str]] = set()
 
     def register_validator(
         self,
@@ -290,6 +292,10 @@ class PoSRegistry:
         - Tịch thu một tỷ lệ cổ phần (mặc định 50%).
         - Nếu stake còn lại <= 0, hủy kích hoạt (deactivate) validator.
         """
+        # Tỷ lệ phạt phải nằm trong (0, 1] — tránh giá trị âm (làm TĂNG stake) hoặc > 100%
+        if not (0 < slash_ratio <= 1):
+            return False, f"slash_ratio không hợp lệ ({slash_ratio}) — phải trong khoảng (0, 1]", {}
+
         # Kiểm tra cùng height
         if block1.height != block2.height:
             return False, "Hai block khác height — không cấu thành vi phạm ký kép", {}
@@ -316,6 +322,12 @@ class PoSRegistry:
 
         if not (sig1_ok and sig2_ok):
             return False, "Một trong hai chữ ký không hợp lệ — bằng chứng gian lận giả", {}
+
+        # Chống replay: mỗi cặp bằng chứng chỉ được phạt 1 lần
+        evidence_key = frozenset({hash1, hash2})
+        if evidence_key in self.slashed_evidence:
+            return False, "Bằng chứng ký kép này đã được xử lý — không phạt lặp lại", {}
+        self.slashed_evidence.add(evidence_key)
 
         # THỰC THI SLASHING
         old_stake = validator.stake

@@ -9,8 +9,9 @@ from blockchain.hash import sha256_hex
 from blockchain.merkle import (
     calculate_merkle_root, generate_merkle_proof, verify_merkle_proof,
 )
-from blockchain.mining import is_valid_pow
+from blockchain.mining import is_valid_pow, is_acceptable_pow, MIN_POW_DIFFICULTY
 from blockchain.transaction import verify_transaction
+from blockchain.wallet import verify_signature
 
 
 def block_work(difficulty: int) -> int:
@@ -25,6 +26,26 @@ def calculate_chain_work(chain: list[Block]) -> int:
     là chuỗi canonical, bất kể số lượng block.
     """
     return sum(block_work(b.header.difficulty) for b in chain if b.height > 0)
+
+
+def verify_pos_signature(block: Block, pos_registry) -> tuple[bool, str]:
+    """Xác minh chữ ký ECDSA của Validator trên block PoS.
+
+    Kiểm tra: validator_address có trong registry và chữ ký khớp
+    hash header (chữ ký KHÔNG nằm trong hash nên phải verify riêng).
+    Không kiểm tra "Validator chính danh tại slot" — việc đó cần seed/stake
+    tại thời điểm tạo block (xem PoSRegistry.verify_pos_block).
+    """
+    addr = block.header.validator_address
+    sig = block.header.validator_signature
+    if not addr or not sig:
+        return False, "Khối PoS thiếu chữ ký số hoặc địa chỉ của Validator"
+    validator = pos_registry.validators.get(addr)
+    if validator is None:
+        return False, f"Validator '{addr[:16]}…' không có trong danh bạ Consortium"
+    if not verify_signature(block.compute_hash(), sig, validator.public_key_hex):
+        return False, "Chữ ký ECDSA của Validator không hợp lệ (sai khoá hoặc block bị sửa)"
+    return True, "OK"
 
 
 class Blockchain:
@@ -130,7 +151,7 @@ class Blockchain:
         """
         return self.chain[-1]
 
-    def is_chain_valid(self) -> tuple[bool, int | None, str]:
+    def is_chain_valid(self, pos_registry=None) -> tuple[bool, int | None, str]:
         """Kiểm tra tính hợp lệ toàn chuỗi, trả về block sai đầu tiên.
 
         Vì sao tồn tại: bất kỳ node nào cũng phải tự kiểm tra toàn chuỗi
@@ -173,19 +194,28 @@ class Blockchain:
 
                 # 3. Kiểm tra tính hợp lệ của cơ chế đồng thuận (PoW hoặc PoS)
                 if block.header.consensus_type == "PoS":
-                    if not block.header.validator_address or not block.header.validator_signature:
+                    if pos_registry is not None:
+                        # Có registry → verify ECDSA thật sự
+                        ok_sig, why = verify_pos_signature(block, pos_registry)
+                        if not ok_sig:
+                            return False, i, f"Block {i}: {why}"
+                    elif not block.header.validator_address or not block.header.validator_signature:
+                        # Không có registry → chỉ kiểm tra được sự hiện diện của chữ ký
                         return (
                             False, i,
                             f"Block {i}: Khối PoS thiếu chữ ký số hoặc địa chỉ của Validator"
                         )
                 else:
-                    if not is_valid_pow(block):
+                    if not is_acceptable_pow(block):
                         block_hash = block.compute_hash()
+                        if block.header.difficulty < MIN_POW_DIFFICULTY:
+                            why = f"difficulty={block.header.difficulty} < mức tối thiểu {MIN_POW_DIFFICULTY}"
+                        else:
+                            why = f"cần {block.header.difficulty} ký tự '0' đầu"
                         return (
                             False, i,
                             f"Block {i}: Proof of Work không hợp lệ "
-                            f"(hash={block_hash[:16]}…, "
-                            f"cần {block.header.difficulty} ký tự '0' đầu)"
+                            f"(hash={block_hash[:16]}…, {why})"
                         )
 
         return (True, None, "Chain hợp lệ")
@@ -227,6 +257,7 @@ class Blockchain:
 
     def verify_credential(
         self, credential_id: str, authorized_issuers: set[str] | None = None,
+        pos_registry=None,
     ) -> tuple[list[tuple[str, bool, str]], str, dict]:
         """Xác minh credential qua 12 bước, trả kết quả từng bước.
 
@@ -361,15 +392,26 @@ class Blockchain:
         if issue_block_idx == 0:
             steps.append(("Đồng thuận khối hợp lệ", True, "Genesis block"))
         elif issue_block.header.consensus_type == "PoS":
-            if issue_block.header.validator_signature and issue_block.header.validator_address:
+            addr16 = issue_block.header.validator_address[:16]
+            if pos_registry is not None:
+                ok_sig, why = verify_pos_signature(issue_block, pos_registry)
+                if ok_sig:
+                    steps.append((
+                        "Đồng thuận PoS hợp lệ", True,
+                        f"Validator: {addr16}… (Chữ ký số ECDSA verified)",
+                    ))
+                else:
+                    steps.append(("Đồng thuận PoS hợp lệ", False, why))
+                    return steps, "INVALID", info
+            elif issue_block.header.validator_signature and issue_block.header.validator_address:
                 steps.append((
                     "Đồng thuận PoS hợp lệ", True,
-                    f"Validator: {issue_block.header.validator_address[:16]}… (Chữ ký số ECDSA verified)",
+                    f"Validator: {addr16}… (có chữ ký; CHƯA xác minh ECDSA vì không có PoS registry)",
                 ))
             else:
                 steps.append(("Đồng thuận PoS hợp lệ", False, "Khối PoS thiếu chữ ký số Validator"))
                 return steps, "INVALID", info
-        elif is_valid_pow(issue_block):
+        elif is_acceptable_pow(issue_block):
             steps.append((
                 "Đồng thuận PoW hợp lệ", True,
                 f"difficulty={issue_block.header.difficulty}, "
@@ -380,7 +422,7 @@ class Blockchain:
             return steps, "INVALID", info
 
         # ── Bước 11: Blockchain hợp lệ ──
-        chain_ok, _, chain_reason = self.is_chain_valid()
+        chain_ok, _, chain_reason = self.is_chain_valid(pos_registry=pos_registry)
         if chain_ok:
             steps.append((
                 "Blockchain hợp lệ", True,
