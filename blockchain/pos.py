@@ -244,6 +244,9 @@ class PoSRegistry:
         if block.header.consensus_type != "PoS":
             return False, f"Loại đồng thuận không phải PoS (nhận: {block.header.consensus_type})"
 
+        if block.header.difficulty != 0 or block.header.nonce != 0:
+            return False, "PoS phải có difficulty=0 và nonce=0"
+
         if block.height != height:
             return False, f"Chiều cao block không khớp (block={block.height}, kỳ vọng={height})"
 

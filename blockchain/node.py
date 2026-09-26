@@ -17,7 +17,6 @@ from blockchain.blockchain import Blockchain, calculate_chain_work, block_work
 from blockchain.mempool import Mempool
 from blockchain.merkle import calculate_merkle_root
 from blockchain.mining import mine_block, is_valid_pow, is_acceptable_pow, MIN_POW_DIFFICULTY
-from blockchain.transaction import verify_transaction
 
 
 @dataclass
@@ -92,6 +91,20 @@ class Node:
         self.network.broadcast(self.node_id, msg)
         return True, "Accepted — đã thêm vào Mempool và broadcast"
 
+    def _validate_candidate(self, block):
+        """Kiểm tra cả nhánh ứng viên trước khi thay đổi chain/pool."""
+        for branch in [self.blockchain.chain, *self.blockchain.side_branches]:
+            for i, parent in enumerate(branch):
+                if parent.compute_hash() == block.header.previous_hash:
+                    candidate = Blockchain()
+                    candidate.chain = branch[:i + 1] + [block]
+                    ok, _, reason = candidate.is_chain_valid(
+                        pos_registry=self.network.pos_registry,
+                        authorized_issuers=self.mempool.authorized_issuers,
+                    )
+                    return ok, reason
+        return False, "Không tìm thấy block cha trong nhánh đã biết"
+
     def mine_pending(self, max_txs: int = 10, difficulty: int = 3) -> tuple:
         """Lấy Tx từ Mempool, tạo Block, mine (PoW), broadcast.
 
@@ -129,6 +142,10 @@ class Node:
             f"⛏️ Block mined! height={height}, nonce={result['nonce']:,}, "
             f"attempts={result['attempts']:,}, time={result['seconds']:.4f}s",
         )
+
+        ok, reason = self._validate_candidate(block)
+        if not ok:
+            return None, reason
 
         # Thêm vào chain của chính mình
         self.blockchain.add_block(block)
@@ -208,6 +225,10 @@ class Node:
             f"🪙 PoS Block forged by '{validator.name}'! height={height}, txs={len(txs)}, "
             f"hash={result['block_hash'][:16]}…",
         )
+
+        ok, reason = self._validate_candidate(block)
+        if not ok:
+            return None, reason
 
         # Thêm vào chuỗi của chính mình
         self.blockchain.add_block(block)
@@ -370,34 +391,13 @@ class Node:
                 )
                 return
 
-        # 3. Kiểm tra từng TX (chữ ký)
-        for tx in block.transactions:
-            ok, reason = verify_transaction(tx)
-            if not ok:
-                self.network.log_event(
-                    self.node_id,
-                    f"❌ BLOCK REJECTED from {msg.sender_id}: "
-                    f"TX {tx.tx_id[:12]}… invalid: {reason}",
-                )
-                return
+        ok, reason = self._validate_candidate(block)
+        if not ok:
+            self.network.log_event(self.node_id, f"❌ BLOCK REJECTED: {reason}")
+            return
 
         my_tip = self.blockchain.get_latest_block().compute_hash()
-
-        # Trường hợp 1: Nối thẳng vào tip của chuỗi chính
         if block.header.previous_hash == my_tip:
-            # Kiểm tra ledger status
-            for tx in block.transactions:
-                cred_id = tx.payload.get("credential_id")
-                if cred_id and tx.tx_type == "ISSUE":
-                    status = self.blockchain.credential_status(cred_id)
-                    if status == "ACTIVE":
-                        self.network.log_event(
-                            self.node_id,
-                            f"❌ BLOCK REJECTED from {msg.sender_id}: "
-                            f"credential {cred_id} đã ACTIVE",
-                        )
-                        return
-
             self.blockchain.add_block(block)
             tx_ids = [tx.tx_id for tx in block.transactions]
             self.mempool.remove_transactions(tx_ids)
@@ -465,46 +465,47 @@ class Node:
             f"SYNC_RESPONSE → {msg.sender_id} (height {self.height}, work {self.blockchain.total_work():,})",
         )
 
-    def _handle_sync_response(self, msg: Message):
+    def _handle_sync_response(self, msg: Message, prefer_equal: bool = False):
         """Nhận chain từ peer — chấp nhận nếu có tổng công việc PoW lớn hơn và hợp lệ.
 
-        Quy tắc Most-Work Chain (Nakamoto Consensus):
-        Chọn chuỗi có tổng 16^difficulty lớn nhất, không chỉ dài hơn.
+        Điểm mô phỏng: PoW dùng 16^difficulty, PoS dùng 1 điểm/khối.
+        prefer_equal chỉ dùng cho nút Sync all để chọn thống nhất khi bằng điểm.
         Khi chuyển chuỗi, các TX ở chuỗi cũ được hoàn trả lại Mempool.
         """
         peer_bc = msg.payload
+        ok, _, reason = peer_bc.is_chain_valid(
+            pos_registry=self.network.pos_registry,
+            authorized_issuers=self.mempool.authorized_issuers,
+        )
+        if not ok:
+            self.network.log_event(self.node_id, f"CHAIN REJECTED from {msg.sender_id}: {reason}")
+            return
         peer_work = peer_bc.total_work()
         my_work = self.blockchain.total_work()
-
-        if peer_work <= my_work:
+        current_ok, _, _ = self.blockchain.is_chain_valid(
+            pos_registry=self.network.pos_registry,
+            authorized_issuers=self.mempool.authorized_issuers,
+        )
+        if current_ok and (peer_work < my_work or (peer_work == my_work and not prefer_equal)):
             self.network.log_event(
                 self.node_id,
-                f"SYNC SKIP from {msg.sender_id}: "
-                f"peer work {peer_work:,} ≤ my work {my_work:,}",
+                f"SYNC SKIP from {msg.sender_id}: peer work {peer_work:,}, my work {my_work:,}",
             )
             return
 
-        ok, _, reason = peer_bc.is_chain_valid(
-            pos_registry=getattr(self.network, "pos_registry", None)
-        )
-        if ok:
-            reverted_txs, disconnected_blocks = self.blockchain.reorganize(peer_bc.chain)
-            for r_tx in reverted_txs:
-                self.mempool.add_transaction(r_tx, self.blockchain)
-            for b in self.blockchain.chain:
-                self.mempool.remove_transactions([t.tx_id for t in b.transactions])
+        reverted_txs, disconnected_blocks = self.blockchain.reorganize(peer_bc.chain)
+        for r_tx in reverted_txs:
+            self.mempool.add_transaction(r_tx, self.blockchain)
+        for b in self.blockchain.chain:
+            self.mempool.remove_transactions([t.tx_id for t in b.transactions])
 
-            self.network.log_event(
-                self.node_id,
-                f"🔄 CHAIN SYNCED & REORG from {msg.sender_id}: "
-                f"Height: {self.height}, Total Work: {self.blockchain.total_work():,}, "
-                f"Hoàn trả {len(reverted_txs)} TX về Mempool.",
-            )
-        else:
-            self.network.log_event(
-                self.node_id,
-                f"CHAIN REJECTED from {msg.sender_id}: {reason}",
-            )
+        self.network.log_event(
+            self.node_id,
+            f"🔄 CHAIN SYNCED & REORG from {msg.sender_id}: "
+            f"Height: {self.height}, Total Work: {self.blockchain.total_work():,}, "
+            f"Hoàn trả {len(reverted_txs)} TX về Mempool.",
+        )
+
 
 
 
@@ -572,6 +573,12 @@ class Network:
         best_work = -1
         for node in self.nodes.values():
             node.status = "ONLINE"
+            ok, _, _ = node.blockchain.is_chain_valid(
+                pos_registry=self.pos_registry,
+                authorized_issuers=node.mempool.authorized_issuers,
+            )
+            if not ok:
+                continue
             w = node.blockchain.total_work()
             if w > best_work or (w == best_work and (best_node is None or node.height > best_node.height)):
                 best_work = w
@@ -581,6 +588,9 @@ class Network:
             best_chain = copy.deepcopy(best_node.blockchain)
             for nid, node in self.nodes.items():
                 if nid != best_node.node_id:
-                    node.blockchain = copy.deepcopy(best_chain)
+                    node._handle_sync_response(
+                        Message("SYNC_RESPONSE", best_node.node_id, copy.deepcopy(best_chain)),
+                        prefer_equal=True,
+                    )
             self.log_event("Network", f"🔄 SYNC ALL: Đã đồng bộ tất cả node theo {best_node.node_id} (Height {best_node.height})")
 

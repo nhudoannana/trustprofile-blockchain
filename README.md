@@ -241,3 +241,16 @@ This repository was developed as a group project for an academic blockchain cour
   chuỗi có PoS, truyền `pos_registry=network.pos_registry`. Thiếu registry sẽ bị từ chối.
 - Benchmark chỉ đo thời gian tạo khối rỗng và số lần thử nonce PoW, chưa đo điện năng.
 - Quy tắc sửa code theo Karpathy guidelines được ghi trong [AGENTS.md](AGENTS.md).
+
+### Backend validation (review round 4)
+
+- Block reception, forks, sync and local production validate transaction signatures
+  and apply ledger rules in order. Only the original issuer can revoke an active credential.
+- Credential IDs are unique for the lifetime of a branch. Reissuing after revocation
+  requires a new ID. Conflicting pending transactions cause block production to be
+  rejected without changing the chain or deleting the pending transactions.
+- Reorganization updates the block pool so the node can receive the next block.
+  Sync all selects a valid source and preserves normal validation and mempool handling.
+- PoS blocks require zero difficulty and nonce. The mixed demo awards 1 point per PoS
+  block and `16 ** difficulty` per PoW block; this is an educational scoring rule,
+  not a production hybrid consensus protocol.
