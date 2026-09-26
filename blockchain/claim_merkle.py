@@ -35,9 +35,19 @@ def generate_salt(num_bytes: int = 16) -> str:
 def compute_claim_leaf_hash(claim_name: str, claim_value: str, salt: str) -> str:
     """Tính hash của một lá claim kèm salt ngẫu nhiên.
 
-    Định dạng chuẩn hóa: sha256(claim_name:claim_value:salt)
+    Định dạng chuẩn hóa: sha256(JSON([claim_name, claim_value, salt])).
+
+    LƯU Ý: trước đây dùng nối chuỗi "name:value:salt" bằng dấu ':' — nếu
+    claim_value chứa ký tự ':' (vd một claim dạng "note": "A:B") thì hai bộ
+    (name, value, salt) khác nhau có thể tạo ra cùng một chuỗi thô, dẫn tới
+    cùng leaf_hash (giả mạo claim). Dùng JSON array kèm độ dài từng phần tử
+    được mã hoá tường minh nên loại bỏ được nhập nhằng ranh giới.
     """
-    raw = f"{str(claim_name).strip()}:{str(claim_value).strip()}:{str(salt).strip()}"
+    raw = json.dumps(
+        [str(claim_name).strip(), str(claim_value).strip(), str(salt).strip()],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     return sha256_hex(raw)
 
 

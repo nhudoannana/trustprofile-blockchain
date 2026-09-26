@@ -141,6 +141,7 @@ if sel_mode == "Chọn từ chứng chỉ đã phát hành (Demo nhanh)" and hol
             claim_value=sel_claim_val,
             salt=sel_salt,
             proof=sel_proof,
+            pos_registry=network.pos_registry,
         )
 
         if ok:
@@ -189,6 +190,7 @@ else:
             claim_value=manual_claim_val.strip(),
             salt=manual_salt.strip(),
             proof=proof_tuples,
+            pos_registry=network.pos_registry,
         )
         if ok:
             st.success(f"### ✅ {reason}")

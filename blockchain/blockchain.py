@@ -454,6 +454,7 @@ class Blockchain:
         claim_value: str,
         salt: str,
         proof: list[tuple[str, str]],
+        pos_registry=None,
     ) -> tuple[bool, str, dict]:
         """Xác minh một claim riêng lẻ bằng Proof of Inclusion với claims_root trên chain.
 
@@ -464,6 +465,11 @@ class Blockchain:
             (is_valid, reason, info)
         """
         from blockchain.claim_merkle import verify_claim_inclusion_proof
+
+        # Chain phải hợp lệ trước khi tin bất kỳ dữ liệu nào đọc từ nó
+        chain_ok, _, chain_reason = self.is_chain_valid(pos_registry=pos_registry)
+        if not chain_ok:
+            return False, f"Blockchain không hợp lệ: {chain_reason}", {}
 
         status = self.credential_status(credential_id)
         if status != "ACTIVE":
@@ -482,6 +488,14 @@ class Blockchain:
 
         if not target_tx:
             return False, f"Không tìm thấy transaction phát hành của credential '{credential_id}'", {}
+
+        # Transaction phải còn nguyên vẹn (chữ ký + tx_id khớp hash) trước khi
+        # tin bất kỳ trường nào trong payload của nó — trước đây bỏ qua bước
+        # này nên claims_root có thể bị sửa sau khi phát hành mà vẫn "xác minh
+        # thành công" miễn kẻ tấn công tự tạo proof khớp root giả của họ.
+        tx_ok, tx_reason = verify_transaction(target_tx)
+        if not tx_ok:
+            return False, f"Transaction phát hành đã bị giả mạo: {tx_reason}", {}
 
         claims_root = target_tx.payload.get("claims_root")
         if not claims_root:
