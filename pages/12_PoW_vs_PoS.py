@@ -5,7 +5,7 @@ Mục đích:
 - Trình diễn mô hình Consortium PoS: Các trường đại học & tổ chức kiểm định nắm giữ cổ phần bảo chứng (Reputation Stake).
 - Bầu chọn Validator chính danh theo trọng số cổ phần P(v) ~ Stake(v) để ký số và tạo khối.
 - Mô phỏng gian lận văn bằng / ký kép (Nothing at Stake) và thực thi cơ chế trừng phạt Slashing.
-- Live Benchmark đo lường trực tiếp năng lực tính toán và năng lượng tiết kiệm giữa PoW và PoS.
+- Live Benchmark đo thời gian tạo khối và số lần thử nonce PoW; không đo điện năng.
 """
 
 import time
@@ -60,8 +60,8 @@ with tab1:
 |---|---|---|
 | **Bản chất trong TrustProfile** | Các máy chủ cạnh tranh giải bài toán băm SHA-256 | Các Trường Đại học & Tổ chức Kiểm định nắm giữ Cổ phần Bảo chứng |
 | **Cơ chế bầu chọn** | Ai tìm ra số Nonce thoả mãn độ khó trước thì được ghi khối | Bầu chọn ngẫu nhiên có trọng số theo uy tín/cổ phần: $P(v) \\sim Stake(v)$ |
-| **Chi phí tính toán CPU** | **Rất lãng phí:** Hàng triệu phép băm thử vô nghĩa để tìm Nonce | **Tối ưu tuyệt đối:** 1 phép băm Merkle Tree + 1 chữ ký số ECDSA |
-| **Tiêu thụ năng lượng** | **Cực lớn:** Không phù hợp cho trường đại học và cơ quan chính phủ | **Giảm > 99.95%:** Chạy mượt mà trên máy chủ thông thường / VPS |
+| **Chi phí tính toán CPU** | **Rất lãng phí:** Hàng triệu phép băm thử vô nghĩa để tìm Nonce | Tính Merkle root, băm header và ký ECDSA; không thử nonce |
+| **Tiêu thụ năng lượng** | Phụ thuộc difficulty và phần cứng; demo chưa đo điện năng | Không đào nonce; mức tiêu thụ thực tế cần đo trên phần cứng |
 | **Phần cứng yêu cầu** | Máy đào chuyên dụng giá đắt (ASIC, GPU công suất cao) | Máy tính thông thường của trường hoặc máy chủ cơ sở dữ liệu |
 | **Rủi ro & Tấn công chính** | **51% Hashrate Attack:** Thâu tóm năng lực băm để ghi đè lịch sử | **Nothing at Stake, Ký kép (Double-Signing), Bắt tay ngầm (Cartel)** |
 | **Cơ chế răn đe / Xử phạt** | Tiền điện và khấu hao phần cứng bị mất nếu đào chuỗi sai | **Slashing:** Tịch thu trực tiếp điểm ký quỹ và tước quyền phát hành |
@@ -360,7 +360,7 @@ with tab3:
 # ──────────────────────────────────────────────
 with tab4:
     st.subheader("⚡ Live Benchmark & So sánh Trực quan PoW vs PoS")
-    st.caption("Chạy benchmark thực tế trên CPU và so sánh qua biểu đồ năng lượng, thời gian và thông lượng.")
+    st.caption("Đo thời gian tạo khối rỗng trên máy đang chạy và số lần thử nonce PoW. Không đo điện năng, độ trễ mạng hay thông lượng giao dịch.")
 
     col_cfg1, col_cfg2 = st.columns([2, 1])
     with col_cfg1:
@@ -376,90 +376,47 @@ with tab4:
         pow_times_ms = []
         pos_times_ms = []
         pow_hashes = []
-        pow_energy_uj = []
-        pos_energy_uj = []
 
         prog = st.progress(0, text="Đang đo lường…")
         for rnd in range(bench_rounds):
             prog.progress((rnd + 1) / bench_rounds, text=f"Vòng {rnd + 1}/{bench_rounds}…")
 
             # --- PoW ---
+            t0 = time.perf_counter()
             block_pow = Block(transactions=[], height=rnd + 1, previous_hash="0" * 64, difficulty=bench_diff)
             pow_res = mine_block(block_pow)
-            pow_ms = pow_res["seconds"] * 1000
-            pow_times_ms.append(round(pow_ms, 2))
+            pow_ms = (time.perf_counter() - t0) * 1000
+            pow_times_ms.append(pow_ms)
             pow_hashes.append(pow_res["attempts"])
-            # Ước tính năng lượng: mỗi phép băm SHA-256 ≈ 1 μJ trên CPU thông thường
-            pow_energy_uj.append(pow_res["attempts"] * 1)
 
             # --- PoS ---
-            t0 = time.time()
+            t0 = time.perf_counter()
             pos_reg.forge_block(v_bench, transactions=[], height=rnd + 1, previous_hash="0" * 64)
-            pos_ms = (time.time() - t0) * 1000
-            pos_times_ms.append(round(pos_ms, 2))
-            # PoS: chỉ 1 phép hash + 1 phép ký ECDSA ≈ 2 μJ
-            pos_energy_uj.append(2)
+            pos_ms = (time.perf_counter() - t0) * 1000
+            pos_times_ms.append(pos_ms)
 
         prog.empty()
 
         avg_pow_ms = round(sum(pow_times_ms) / len(pow_times_ms), 2)
         avg_pos_ms = round(sum(pos_times_ms) / len(pos_times_ms), 2)
-        total_pow_energy = sum(pow_energy_uj)
-        total_pos_energy = sum(pos_energy_uj)
         total_pow_hashes = sum(pow_hashes)
 
         # ── Metrics ──
         st.markdown("### 📊 Kết quả Tổng hợp")
-        mc1, mc2, mc3, mc4 = st.columns(4)
-        mc1.metric("TB Thời gian PoW", f"{avg_pow_ms:,.1f} ms", delta=f"+{avg_pow_ms - avg_pos_ms:,.1f} ms lãng phí", delta_color="inverse")
-        mc2.metric("TB Thời gian PoS", f"{avg_pos_ms:.2f} ms", delta="Tức thì ⚡")
-        mc3.metric("Tổng phép băm PoW", f"{total_pow_hashes:,}", delta=f"PoS chỉ {bench_rounds} hash", delta_color="inverse")
-        mc4.metric("Năng lượng tiết kiệm (%)", f"{(1 - total_pos_energy / max(total_pow_energy, 1)) * 100:.2f}%", delta="PoS thân thiện môi trường")
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("TB Thời gian PoW", f"{avg_pow_ms:,.1f} ms")
+        mc2.metric("TB Thời gian PoS", f"{avg_pos_ms:.2f} ms")
+        mc3.metric("Tổng lần thử nonce PoW", f"{total_pow_hashes:,}")
 
         st.divider()
 
-        # ── BIỂU ĐỒ 1: Năng lượng tiêu thụ (μJ) ──
-        st.markdown("#### 📉 Biểu đồ 1: Năng lượng tiêu thụ (μJ) — PoW vs PoS")
+        # ── BIỂU ĐỒ 1: So sánh đa chỉ số ──
+        st.markdown("#### 📊 Biểu đồ 1: So sánh Tổng quan PoW vs PoS")
         try:
             import plotly.graph_objects as go
-            fig_energy = go.Figure()
-            fig_energy.add_trace(go.Bar(
-                name="PoW",
-                x=["Năng lượng (μJ)"],
-                y=[total_pow_energy],
-                marker_color="#f59e0b",
-                text=[f"{total_pow_energy:,} μJ"],
-                textposition="auto",
-            ))
-            fig_energy.add_trace(go.Bar(
-                name="PoS",
-                x=["Năng lượng (μJ)"],
-                y=[total_pos_energy],
-                marker_color="#10b981",
-                text=[f"{total_pos_energy} μJ"],
-                textposition="auto",
-            ))
-            fig_energy.update_layout(
-                barmode="group",
-                title="Năng lượng tiêu thụ (μJ) — PoW vs PoS",
-                paper_bgcolor="#1e1e2e",
-                plot_bgcolor="#1e1e2e",
-                font=dict(color="white"),
-                legend=dict(bgcolor="#2a2a3e"),
-                yaxis=dict(gridcolor="#3a3a4e"),
-            )
-            st.plotly_chart(fig_energy, use_container_width=True)
-        except ImportError:
-            st.bar_chart({"PoW (μJ)": [total_pow_energy], "PoS (μJ)": [total_pos_energy]})
-
-        st.divider()
-
-        # ── BIỂU ĐỒ 2: So sánh đa chỉ số ──
-        st.markdown("#### 📊 Biểu đồ 2: So sánh Tổng quan PoW vs PoS")
-        try:
-            categories = ["Khối tạo", "Phần thưởng (hash/block)", "TB thời gian (ms)"]
-            pow_vals = [bench_rounds, total_pow_hashes // max(bench_rounds, 1), int(avg_pow_ms)]
-            pos_vals = [bench_rounds, 1, int(avg_pos_ms)]
+            categories = ["Khối tạo", "TB thời gian (ms)"]
+            pow_vals = [bench_rounds, avg_pow_ms]
+            pos_vals = [bench_rounds, avg_pos_ms]
 
             fig_compare = go.Figure()
             fig_compare.add_trace(go.Bar(
@@ -493,8 +450,8 @@ with tab4:
 
         st.divider()
 
-        # ── BIỂU ĐỒ 3: Thời gian tạo khối theo vòng (Line chart) ──
-        st.markdown("#### 📈 Biểu đồ 3: Thời gian tạo khối theo vòng (ms)")
+        # ── BIỂU ĐỒ 2: Thời gian tạo khối theo vòng (Line chart) ──
+        st.markdown("#### 📈 Biểu đồ 2: Thời gian tạo khối theo vòng (ms)")
         try:
             rounds_x = list(range(1, bench_rounds + 1))
             fig_line = go.Figure()
@@ -532,8 +489,8 @@ with tab4:
         st.success(
             f"✅ **Kết luận:** Trong {bench_rounds} vòng đo lường:\n"
             f"- PoW tốn trung bình **{avg_pow_ms:,.1f} ms** và **{total_pow_hashes:,} phép băm** tổng cộng.\n"
-            f"- PoS chỉ tốn trung bình **{avg_pos_ms:.2f} ms** và **{bench_rounds} phép băm** tổng cộng.\n"
-            f"- PoS tiết kiệm khoảng **{(1 - total_pos_energy / max(total_pow_energy, 1)) * 100:.1f}%** năng lượng so với PoW!"
+            f"- PoS tạo và ký khối trung bình **{avg_pos_ms:.2f} ms**.\n"
+            "- Chưa đo điện năng nên không kết luận phần trăm tiết kiệm điện."
         )
 
 

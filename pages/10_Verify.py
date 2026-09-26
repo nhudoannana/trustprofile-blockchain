@@ -108,7 +108,7 @@ st.caption(
 
 st.info(
     "💡 **Nguyên lý Proof of Inclusion & Vai trò của Salt:**\n\n"
-    "- Mỗi claim được băm: `leaf_hash = sha256(claim_name + ':' + claim_value + ':' + salt)`.\n"
+    "- Mỗi claim được băm: `leaf_hash = SHA256(JSON([claim_name, claim_value, salt]))`.\n"
     "- Blockchain chỉ lưu duy nhất **`claims_root`** trong block header / transaction payload, không chứa thông tin thô.\n"
     "- **Vì sao cần Salt?** Nếu không có salt, một claim có miền giá trị ít khả năng (như `Grade = A`) "
     "sẽ dễ dàng bị dò băm bằng cách tính thử `sha256('grade:A')`, `sha256('grade:B')`... Salt 128-bit biến không gian thử thành $2^{128}$, chống hoàn toàn tấn công từ điển.\n"

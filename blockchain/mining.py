@@ -21,14 +21,14 @@ def mine_block(block) -> dict:
     difficulty = block.header.difficulty
     target_prefix = "0" * difficulty
 
-    start = time.time()
+    start = time.perf_counter()
     nonce = 0
 
     while True:
         block.header.nonce = nonce
         block_hash = block.compute_hash()
         if block_hash.startswith(target_prefix):
-            elapsed = time.time() - start
+            elapsed = time.perf_counter() - start
             return {
                 "nonce": nonce,
                 "attempts": nonce + 1,

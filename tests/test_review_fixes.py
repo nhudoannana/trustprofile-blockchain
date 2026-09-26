@@ -168,8 +168,10 @@ def test_verify_credential_does_not_claim_ecdsa_verified_without_registry():
     bc = Blockchain()
     bc.add_block(_forged_pos_block(bc, txs=[_issue_tx()]))
 
-    steps, _, _ = bc.verify_credential("CRED-RF-001")
+    steps, status, _ = bc.verify_credential("CRED-RF-001")
+    assert status == "INVALID"
     pos_step = [s for s in steps if "PoS" in s[0]][0]
+    assert pos_step[1] is False
     assert "CHƯA xác minh" in pos_step[2]
     assert "ECDSA verified" not in pos_step[2]
 

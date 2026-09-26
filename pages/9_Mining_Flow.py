@@ -253,8 +253,7 @@ if "PoS" in flow_mode:
                 st.success(
                     f"✅ **Khối PoS tạo thành công!** Height {block.height} | "
                     f"Ký bởi: **{res['validator_name']}** | "
-                    f"Thời gian: {res['seconds']:.4f}s | "
-                    f"Tiết kiệm điện: ~{res['energy_saved_percent']}%"
+                    f"Thời gian tạo/ký: {res['seconds']:.6f}s (chưa đo điện năng)"
                 )
                 st.code(res["block_hash"], language="text")
 

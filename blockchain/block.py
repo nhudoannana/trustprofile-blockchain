@@ -81,6 +81,7 @@ class Block:
             "nonce": self.header.nonce,
         }
         if self.header.consensus_type == "PoS":
+            header_dict["height"] = self.height
             header_dict["consensus_type"] = self.header.consensus_type
             header_dict["validator_address"] = self.header.validator_address
 

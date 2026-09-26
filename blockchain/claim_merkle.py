@@ -2,7 +2,7 @@
 
 Mục đích:
 - Mỗi claim trong credential được băm thành một lá Merkle kèm một salt ngẫu nhiên riêng:
-  leaf_hash = sha256(claim_name + ":" + claim_value + ":" + salt)
+  leaf_hash = SHA256(JSON([claim_name, claim_value, salt]))
 - Chỉ Merkle Root của các claim (claims_root) được đưa vào payload lưu trên blockchain.
 - Holder có thể tiết lộ chọn lọc 1 claim kèm salt và Merkle Proof cho Verifier.
 - Verifier kiểm chứng tính bao hàm (Proof of Inclusion) với claims_root trên chain

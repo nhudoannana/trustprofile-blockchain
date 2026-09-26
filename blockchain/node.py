@@ -184,7 +184,8 @@ class Node:
             if not validator:
                 return None, "Không tìm thấy validator hợp lệ trong mạng PoS"
 
-        # Validator tạo và ký khối
+        # Đo thời gian tạo và ký khối; không suy ra điện năng từ thời gian.
+        started = time.perf_counter()
         block = pos_reg.forge_block(
             validator=validator,
             transactions=list(txs),
@@ -199,8 +200,7 @@ class Node:
             "height": height,
             "block_hash": block.compute_hash(),
             "tx_count": len(txs),
-            "seconds": 0.001,
-            "energy_saved_percent": 99.98,
+            "seconds": time.perf_counter() - started,
         }
 
         self.network.log_event(
@@ -318,6 +318,14 @@ class Node:
              Nếu nhánh phụ có tổng PoW (sum 16^d) > chuỗi chính -> REORG & hoàn trả TX về Mempool!
         """
         block = msg.payload
+        # Height phải nối tiếp block cha, kể cả trên nhánh phụ.
+        parent = self.blockchain.block_pool.get(block.header.previous_hash)
+        if parent is None:
+            self.request_sync()
+            return
+        if block.height != parent.height + 1:
+            self.network.log_event(self.node_id, "❌ BLOCK REJECTED: height không nối tiếp block cha")
+            return
 
         # 1. Kiểm tra merkle_root
         tx_hashes = [tx.tx_id for tx in block.transactions]

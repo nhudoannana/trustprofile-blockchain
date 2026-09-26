@@ -82,7 +82,7 @@ def test_chain_valid_with_mixed_pow_pos_blocks():
     n1.forge_pos_pending(validator=val, seed=42)
     _wait(net)
 
-    ok, bad_idx, reason = n1.blockchain.is_chain_valid()
+    ok, bad_idx, reason = n1.blockchain.is_chain_valid(pos_registry=net.pos_registry)
     assert ok is True
     assert bad_idx is None
     assert len(n1.blockchain.chain) == 3
@@ -111,7 +111,7 @@ def test_verify_credential_minted_via_pos():
     n1.forge_pos_pending(validator=val, seed=42)
     _wait(net)
 
-    steps, status, info = n1.blockchain.verify_credential("CRED-POS-VERIFY")
+    steps, status, info = n1.blockchain.verify_credential("CRED-POS-VERIFY", pos_registry=net.pos_registry)
     assert status == "VERIFIED"
     assert all(ok for _, ok, _ in steps), f"Some step failed: {steps}"
 

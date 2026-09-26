@@ -36,6 +36,8 @@ def verify_pos_signature(block: Block, pos_registry) -> tuple[bool, str]:
     Không kiểm tra "Validator chính danh tại slot" — việc đó cần seed/stake
     tại thời điểm tạo block (xem PoSRegistry.verify_pos_block).
     """
+    if pos_registry is None:
+        return False, "CHƯA xác minh ECDSA: thiếu PoS registry đáng tin cậy"
     addr = block.header.validator_address
     sig = block.header.validator_signature
     if not addr or not sig:
@@ -168,6 +170,8 @@ class Blockchain:
         """
         for i in range(len(self.chain)):
             block = self.chain[i]
+            if block.height != i:
+                return False, i, f"Block {i}: height không khớp vị trí trong chuỗi"
 
             # 1. Kiểm tra merkle_root khớp giao dịch
             tx_hashes = [tx.tx_id for tx in block.transactions]
@@ -194,17 +198,9 @@ class Blockchain:
 
                 # 3. Kiểm tra tính hợp lệ của cơ chế đồng thuận (PoW hoặc PoS)
                 if block.header.consensus_type == "PoS":
-                    if pos_registry is not None:
-                        # Có registry → verify ECDSA thật sự
-                        ok_sig, why = verify_pos_signature(block, pos_registry)
-                        if not ok_sig:
-                            return False, i, f"Block {i}: {why}"
-                    elif not block.header.validator_address or not block.header.validator_signature:
-                        # Không có registry → chỉ kiểm tra được sự hiện diện của chữ ký
-                        return (
-                            False, i,
-                            f"Block {i}: Khối PoS thiếu chữ ký số hoặc địa chỉ của Validator"
-                        )
+                    ok_sig, why = verify_pos_signature(block, pos_registry)
+                    if not ok_sig:
+                        return False, i, f"Block {i}: {why}"
                 else:
                     if not is_acceptable_pow(block):
                         block_hash = block.compute_hash()
@@ -393,24 +389,14 @@ class Blockchain:
             steps.append(("Đồng thuận khối hợp lệ", True, "Genesis block"))
         elif issue_block.header.consensus_type == "PoS":
             addr16 = issue_block.header.validator_address[:16]
-            if pos_registry is not None:
-                ok_sig, why = verify_pos_signature(issue_block, pos_registry)
-                if ok_sig:
-                    steps.append((
-                        "Đồng thuận PoS hợp lệ", True,
-                        f"Validator: {addr16}… (Chữ ký số ECDSA verified)",
-                    ))
-                else:
-                    steps.append(("Đồng thuận PoS hợp lệ", False, why))
-                    return steps, "INVALID", info
-            elif issue_block.header.validator_signature and issue_block.header.validator_address:
-                steps.append((
-                    "Đồng thuận PoS hợp lệ", True,
-                    f"Validator: {addr16}… (có chữ ký; CHƯA xác minh ECDSA vì không có PoS registry)",
-                ))
-            else:
-                steps.append(("Đồng thuận PoS hợp lệ", False, "Khối PoS thiếu chữ ký số Validator"))
+            ok_sig, why = verify_pos_signature(issue_block, pos_registry)
+            if not ok_sig:
+                steps.append(("Đồng thuận PoS hợp lệ", False, why))
                 return steps, "INVALID", info
+            steps.append((
+                "Đồng thuận PoS hợp lệ", True,
+                f"Validator: {addr16}… (Chữ ký số ECDSA verified)",
+            ))
         elif is_acceptable_pow(issue_block):
             steps.append((
                 "Đồng thuận PoW hợp lệ", True,

@@ -232,3 +232,12 @@ The Attack Simulator (`pages/11_Attacks.py`) runs six tamper scenarios interacti
 ## Educational Notice
 
 This repository was developed as a group project for an academic blockchain course. It demonstrates core blockchain mechanisms — hashing, digital signatures, Merkle Trees, Proof of Work, peer-to-peer consensus, and tamper detection — in a controlled simulation environment. It is not intended for production use or real-world credential issuance.
+
+### Lưu ý sau bản sửa PoS (review vòng 3)
+
+- Hash/chữ ký PoS bao gồm `height` để chống sửa bằng chứng ký kép. Block PoS
+  tạo bằng phiên bản cũ cần tạo lại; khởi động lại ứng dụng để reset mạng demo trong RAM.
+- Khi gọi `is_chain_valid`, `verify_credential` hoặc `verify_selective_claim` cho
+  chuỗi có PoS, truyền `pos_registry=network.pos_registry`. Thiếu registry sẽ bị từ chối.
+- Benchmark chỉ đo thời gian tạo khối rỗng và số lần thử nonce PoW, chưa đo điện năng.
+- Quy tắc sửa code theo Karpathy guidelines được ghi trong [AGENTS.md](AGENTS.md).

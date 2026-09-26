@@ -12,11 +12,11 @@ from dataclasses import asdict
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from state import init_state
+from state import init_state, get_pos_registry
 from blockchain.wallet import Wallet, generate_wallet
 from blockchain.transaction import Credential, Transaction
 from blockchain.block import Block
-from blockchain.blockchain import Blockchain
+from blockchain.blockchain import Blockchain, verify_pos_signature
 from blockchain.merkle import calculate_merkle_root
 from blockchain.mining import mine_block, is_valid_pow
 
@@ -84,8 +84,8 @@ def _show_block(block, validation_status=None):
             st.markdown(f"**Version:** {block.header.version}")
             st.markdown(f"**Transactions:** {block.transaction_count}")
             if is_pos:
-                sig_ok = bool(block.header.validator_signature)
-                st.markdown(f"**Chữ ký PoS:** {'✅ Hợp lệ' if sig_ok else '❌ Thiếu'}")
+                sig_ok, _ = verify_pos_signature(block, get_pos_registry())
+                st.markdown(f"**Chữ ký PoS:** {'✅ Hợp lệ' if sig_ok else '❌ Không hợp lệ'}")
             else:
                 pow_ok = is_valid_pow(block)
                 st.markdown(f"**PoW valid:** {'✅' if pow_ok else '❌'}")
@@ -129,8 +129,9 @@ def _validate_per_block(bc):
 
             # Kiểm tra cơ chế đồng thuận
             if block.header.consensus_type == "PoS":
-                if not block.header.validator_address or not block.header.validator_signature:
-                    results[i] = (False, "Khối PoS thiếu chữ ký số hoặc địa chỉ của Validator")
+                sig_ok, sig_reason = verify_pos_signature(block, get_pos_registry())
+                if not sig_ok:
+                    results[i] = (False, sig_reason)
                     continue
             else:
                 # Proof of Work
@@ -164,7 +165,7 @@ bc = st.session_state.demo_blockchain
 # ══════════════════════════════════════════════
 st.subheader("🔹 Chuỗi Block")
 
-ok, fail_idx, reason = bc.is_chain_valid()
+ok, fail_idx, reason = bc.is_chain_valid(pos_registry=get_pos_registry())
 if ok:
     st.success(f"✅ Chain hợp lệ — {len(bc.chain)} block")
 else:
@@ -229,7 +230,7 @@ else:
             else:
                 st.error(f"  Block {i}: ❌ {v_reason}")
 
-        t_ok, t_idx, t_reason = tampered_bc.is_chain_valid()
+        t_ok, t_idx, t_reason = tampered_bc.is_chain_valid(pos_registry=get_pos_registry())
         st.markdown("---")
         st.error(f"**is_chain_valid()** → `(False, {t_idx}, \"{t_reason}\")`")
         st.info(
@@ -268,7 +269,7 @@ else:
             recomp_bc.chain[i].header.previous_hash = recomp_bc.chain[i - 1].compute_hash()
 
         # Validate — giờ PoW sẽ phát hiện
-        r_ok, r_idx, r_reason = recomp_bc.is_chain_valid()
+        r_ok, r_idx, r_reason = recomp_bc.is_chain_valid(pos_registry=get_pos_registry())
 
         if r_ok:
             st.success(f"✅ is_chain_valid() → `(True, None, \"Chain hợp lệ\")`")
