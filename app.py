@@ -211,6 +211,7 @@ pg = st.navigation([
     st.Page("pages/9_Mining_Flow.py", title="Mining & Consensus Flow", icon="🔄"),
     st.Page("pages/10_Verify.py", title="Verify Credential", icon="✅"),
     st.Page("pages/11_Attacks.py", title="Attack Simulator", icon="🛡️"),
+    st.Page("pages/12_PoW_vs_PoS.py", title="PoW vs PoS & Slashing", icon="⚖️"),
 ])
 
 st.sidebar.divider()
