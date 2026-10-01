@@ -13,7 +13,12 @@ st.set_page_config(
     page_icon="🔗",
     layout="wide",
 )
-
+# ── Cổng đăng nhập Google ──
+if not st.user.is_logged_in:
+    st.title("🔗 TRUSTMEBRO")
+    st.write("Vui lòng đăng nhập để tiếp tục.")
+    st.button("Đăng nhập bằng Google", on_click=st.login)
+    st.stop()
 
 # ══════════════════════════════════════════════
 # Dashboard (callable cho st.Page)
@@ -212,9 +217,12 @@ pg = st.navigation([
     st.Page("pages/10_Verify.py", title="Verify Credential", icon="✅"),
     st.Page("pages/11_Attacks.py", title="Attack Simulator", icon="🛡️"),
     st.Page("pages/12_PoW_vs_PoS.py", title="PoW vs PoS & Slashing", icon="⚖️"),
+    st.Page("pages/13_Chatbot.py", title="Trợ lý AI", icon="🤖"),
 ])
 
 st.sidebar.divider()
+st.sidebar.caption(f"👤 {st.user.email}")
+st.sidebar.button("Đăng xuất", on_click=st.logout)
 st.sidebar.caption("Đồ án môn Blockchain — Nhóm 7 người")
 
 pg.run()
