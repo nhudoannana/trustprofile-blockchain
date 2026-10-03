@@ -1,10 +1,10 @@
-# TrustProfile — Blockchain-Based Verifiable Profile & Credential System
+# TRUSTMEBRO — Blockchain-Based Verifiable Profile & Credential System
 
 > An educational blockchain simulation that demonstrates how digital credentials can be issued, verified, and protected from tampering using SHA-256 hashing, ECDSA digital signatures, Merkle Trees, Proof of Work, and multi-node consensus.
 
 ## Overview
 
-TrustProfile models a complete credential lifecycle on a simplified blockchain:
+TRUSTMEBRO models a complete credential lifecycle on a simplified blockchain:
 
 1. An **Issuer** creates a digital credential for a **Holder** (e.g., a university degree).
 2. The credential is packaged into a **Transaction** and signed with an **ECDSA (SECP256K1) digital signature**.
@@ -69,6 +69,31 @@ pip install -r requirements.txt
 
 ## Running the Application
 
+Integrated frontend (completed A–G credential journey):
+
+```bash
+python -m uvicorn api.wallet_api:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000`. Use a **single Uvicorn worker** (the default);
+multiple workers create separate in-memory sessions. Do not use `--reload` on
+demo day because it wipes in-memory state on every file save. All users share
+one queue-based Network (Node-1/2/3; ports 5001/5002/5003 are labels only).
+“Bắt đầu lại” resets the network and all wallets, then generates fresh demo
+wallets. The A–G journey supports signing, mempool submission, PoW mining,
+sync/offline catch-up, verification, presentation comparison and revocation.
+The brand opens `http://127.0.0.1:8000/landing.html`; its entry buttons return
+to `http://127.0.0.1:8000/ui/trustmebro.html`.
+
+Verification by ID checks the on-chain record only (`record_verified`). A
+presented document is accepted only with VERIFIED and `presentation_match=true`
+(`presented_document_accepted`). `presentation_match=null` means no comparison.
+The legacy `success` field remains compatible and is not proof that a document
+was compared. Issuer identity comes from verified ISSUE metadata, not the
+currently selected wallet or a PoS validator.
+
+The separate Streamlit learning interface:
+
 ```bash
 streamlit run app.py
 ```
@@ -77,11 +102,17 @@ Streamlit typically opens at `http://localhost:8501` in the default browser.
 
 ## Running the Tests
 
+Install Python dependencies with `python -m pip install -r requirements.txt`.
+**Node.js must also be installed and `node` available on PATH**: the existing
+JavaScript UI tests execute the real inline handlers using Node's VM. These
+tests are required and are not skipped when Node is missing. Check `node --version`.
+
 ```bash
-python -m pytest -v
+python -m pytest -q
 ```
 
-Latest test run: **51 passed, 0 failed, 0 skipped, 0 warnings** (Python 3.13.7, pytest 8.3.3).
+The reviewed A–G tree passed **282 tests** before these completion fixes.
+Run the suite above to validate your current tree; test totals change with regressions.
 
 ## Project Structure
 
@@ -158,7 +189,7 @@ trustprofile/
 
 ## End-to-End Demo Flow
 
-1. **Create an Issuer wallet** — Open *Wallet & Digital Signature*, enter a name (e.g., "Demo University"), click *Generate Wallet*.
+1. **Create an Issuer wallet** — Open *Wallet & Digital Signature*, enter a name (e.g., "Trường Đại học A"), click *Generate Wallet*.
 2. **Create and sign a credential transaction** — Open *Mining & Consensus Flow*, select the Issuer wallet, fill in Credential ID / Holder / Title, click *Create → Sign → Submit → Broadcast*.
 3. **Broadcast the transaction** — The transaction is automatically broadcast to all online nodes upon submission.
 4. **Inspect the mempool** — Open *Network*, expand a node's detail to see pending transactions in its mempool.
@@ -232,3 +263,76 @@ The Attack Simulator (`pages/11_Attacks.py`) runs six tamper scenarios interacti
 ## Educational Notice
 
 This repository was developed as a group project for an academic blockchain course. It demonstrates core blockchain mechanisms — hashing, digital signatures, Merkle Trees, Proof of Work, peer-to-peer consensus, and tamper detection — in a controlled simulation environment. It is not intended for production use or real-world credential issuance.
+
+### Lưu ý sau bản sửa PoS (review vòng 3)
+
+- Hash/chữ ký PoS bao gồm `height` để chống sửa bằng chứng ký kép. Block PoS
+  tạo bằng phiên bản cũ cần tạo lại; khởi động lại ứng dụng để reset mạng demo trong RAM.
+- Khi gọi `is_chain_valid`, `verify_credential` hoặc `verify_selective_claim` cho
+  chuỗi có PoS, truyền `pos_registry=network.pos_registry`. Thiếu registry sẽ bị từ chối.
+- Benchmark chỉ đo thời gian tạo khối rỗng và số lần thử nonce PoW, chưa đo điện năng.
+- Quy tắc sửa code theo Karpathy guidelines được ghi trong [AGENTS.md](AGENTS.md).
+
+### Backend validation (review round 4)
+
+- Block reception, forks, sync and local production validate transaction signatures
+  and apply ledger rules in order. Only the original issuer can revoke an active credential.
+- Credential IDs are unique for the lifetime of a branch. Reissuing after revocation
+  requires a new ID. Conflicting pending transactions cause block production to be
+  rejected without changing the chain or deleting the pending transactions.
+- Reorganization updates the block pool so the node can receive the next block.
+  Sync all selects a valid source and preserves normal validation and mempool handling.
+- PoS blocks require zero difficulty and nonce. The mixed demo awards 1 point per PoS
+  block and `16 ** difficulty` per PoW block; this is an educational scoring rule,
+  not a production hybrid consensus protocol.
+
+### Guided journey PoS integration
+
+Run `python -m uvicorn api.wallet_api:app --host 127.0.0.1 --port 8000`
+and open http://127.0.0.1:8000/ui/trustmebro.html. Step 4 defaults to PoW;
+PoS is an optional choice. Step 6 keeps explicit PoW mining for revocation.
+
+- `GET /api/consensus/pos?node_id=Node-1` returns public validator identities,
+  eligibility, stake, selection weights, stake mode, seed, next height/parent
+  and a **provisional** backend prediction. Weights are not guaranteed frequencies.
+  A different chain tip can change the actual signer.
+- `POST /api/mining/pos` accepts only `{"node_id":"Node-1"}`. The backend
+  selects the validator, signs, validates, appends and queue-broadcasts once.
+  The response contains `forged`, a verbatim backend rejection `reason`, canonical
+  `block`, `transaction_ids`, public `signer` (including stake/weight), `seconds`,
+  `elapsed_scope`, and `reset_count`. Time measures the complete
+  `forge_pos_pending` call, excluding API lock acquisition and peer propagation.
+  It is not an energy measurement or a nonce-search count.
+- Unknown nodes return 404. Offline/empty/no-eligible/candidate failures return
+  `forged=false` without deleting pending transactions. Unexpected exceptions
+  return 500. Both APIs return full public keys/addresses, never private keys.
+- Session then sorted node locks coordinate these API operations with reset,
+  submission, mining and node workers. Signer metadata belongs to the same registry
+  and session as forging. No locks are held waiting for peer propagation.
+
+Existing simulation limitations are preserved:
+
+- Guided issuer wallets and validator wallets have distinct keys, even with equal
+  display names. Guided issuance does not increase validator stake; this integration
+  does not call `sync_with_blockchain`, so the current selection weights stay stable.
+- The registry holds validator private signing keys in one server process. These
+  are simulated validators, not independently secured machines.
+- Live PoS reception checks the rightful proposer, but full-chain validation and
+  credential verification validate registry signatures without replaying historical
+  validator selection. A trusted registry is required.
+- Mixed-chain fork scores remain `16 ** difficulty` for each PoW block and 1 for
+  each PoS block; the two block types are not equally weighted.
+- Reset/restart clears in-memory demo state and creates fresh identities. ID-only
+  VERIFIED verifies the on-chain record; presented-document acceptance additionally
+  requires `presentation_match=true`. No comparison keeps it null.
+
+### TRUSTMEBRO app review
+
+See [the project review](docs/REVIEW_2026-09-26.md) for confirmed fixes, validation and remaining scope.
+The network starts with three validator wallets. Reset Stake keeps their existing keys;
+Generate Wallet intentionally creates another identity. Wallets with equal names may still
+have different addresses, so selectors display addresses. After updating from the older
+wallet-reset implementation, restart Streamlit and refresh the browser for a clean demo.
+
+Credentials & Transactions now lets you submit each saved signed transaction to the network.
+Continue in Mining & Consensus Flow, then Verify Credential to verify the included claims.

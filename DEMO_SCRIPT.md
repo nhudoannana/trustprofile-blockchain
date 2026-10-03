@@ -1,4 +1,4 @@
-# TrustProfile — Video Demonstration Script
+# TRUSTMEBRO — Video Demonstration Script
 
 **Target duration:** 5–8 minutes
 **Objective:** Demonstrate one complete end-to-end credential flow and at least two tamper/attack cases that the system detects and rejects.
@@ -7,15 +7,36 @@
 
 ## 1. Preparation Before Recording
 
+For the integrated frontend demo, run:
+
+```bash
+python -m uvicorn api.wallet_api:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000`. Use a **single Uvicorn worker** (default).
+Do not use `--reload` on demo day because it wipes in-memory state on every
+file save. This frontend supports the completed A–G journey in one shared demo
+session. Confirm “Bắt đầu lại”
+to clear the shared network and user wallets and re-seed demo wallets for everyone.
+
+For A–G: choose wallet → issue/sign → submit → PoW mine → sync → verify original
+→ edit presentation title → mismatch → restore → submit REVOKE → explicitly
+mine → sync → REVOKED. ID-only verification checks the record, not a presented
+document. A presentation is accepted only when VERIFIED and presentation_match=true.
+
+Install requirements.txt and Node.js (`node` on PATH), then run `python -m pytest -q`.
+JavaScript handler tests are required. The walkthrough below uses the separate
+Streamlit learning interface.
+
 Complete this checklist before starting the screen recording:
 
 - [ ] Activate the virtual environment: `.venv\Scripts\activate`
 - [ ] Install dependencies: `pip install -r requirements.txt`
-- [ ] Run all tests and confirm 51 pass: `python -m pytest -v`
+- [ ] Run all tests with Python and Node.js available: `python -m pytest -q`
 - [ ] Start Streamlit: `streamlit run app.py`
 - [ ] Confirm the Dashboard loads at `http://localhost:8501` with all metrics at zero or default
 - [ ] If the blockchain already contains data from a previous session, restart Streamlit to reset
-- [ ] Prepare sample credential information (e.g., Issuer: "Demo University", Holder: "Alice", Title: "BSc Computer Science", Credential ID: "CRED-0001")
+- [ ] Prepare sample credential information (e.g., Issuer: "Trường Đại học A", Holder: "Người học DEMO-001", Title: "Chứng chỉ Phân tích dữ liệu", Credential ID: "CRED-DEMO-001")
 - [ ] Confirm that no real private keys, passwords, or sensitive personal information will appear in the recording
 - [ ] Close unrelated browser tabs and notifications
 
@@ -28,12 +49,12 @@ Complete this checklist before starting the screen recording:
 **Screen:** Dashboard (home page)
 
 **Actions:**
-1. Show the Dashboard title "TrustProfile" and the overview text.
+1. Show the Dashboard title "TRUSTMEBRO" and the overview text.
 2. Scroll to the **End-to-End Flow** diagram.
 3. Briefly point to the sidebar showing all 12 pages.
 
 **Narration:**
-> "TrustProfile is a blockchain simulation that demonstrates how digital credentials — such as university degrees — can be issued, verified, and protected from tampering. The system covers the full blockchain pipeline: from SHA-256 hashing and digital signatures, through transaction validation and mining, to multi-node consensus and credential verification. Let me walk you through a complete flow."
+> "TRUSTMEBRO is a blockchain simulation that demonstrates how digital credentials — such as university degrees — can be issued, verified, and protected from tampering. The system covers the full blockchain pipeline: from SHA-256 hashing and digital signatures, through transaction validation and mining, to multi-node consensus and credential verification. Let me walk you through a complete flow."
 
 **Expected result:** Dashboard displays metrics (all at 0 initially), the flow diagram is visible, and the sidebar lists all 12 pages.
 
@@ -63,7 +84,7 @@ Complete this checklist before starting the screen recording:
 
 **Actions:**
 1. Navigate to **Wallet & Digital Signature**.
-2. Enter name `"Demo University"` and click **Generate Wallet**.
+2. Enter name `"Trường Đại học A"` and click **Generate Wallet**.
 3. Show the public key and address. Point out that the private key is hidden by default.
 4. Type a message, e.g., `"Transfer 10 BTC to Bob"`, click **Sign**.
 5. Click **Verify** → result: ✅ VALID.
@@ -84,10 +105,10 @@ Complete this checklist before starting the screen recording:
 1. Navigate to **Mining & Consensus Flow**.
 2. If no wallet exists, click **⚡ Tạo wallet demo** to create one quickly.
 3. In section **① Tạo & Gửi Transaction**:
-   - Select the Issuer wallet (e.g., "Demo University" or "Demo Issuer").
-   - Set Credential ID: `CRED-0001`.
-   - Set Holder: `Alice`.
-   - Set Title: `BSc Computer Science`.
+   - Select the Issuer wallet (e.g., "Trường Đại học A").
+   - Set Credential ID: `CRED-DEMO-001`.
+   - Set Holder: `Người học DEMO-001`.
+   - Set Title: `Chứng chỉ Phân tích dữ liệu`.
    - Select target node: `Node-1`.
 4. Click **📤 Create → Sign → Submit → Broadcast**.
 
@@ -227,7 +248,7 @@ If time permits, also demonstrate Attack 6 to show that recalculating hashes is 
 3. Return to the Dashboard; point to the updated metrics (Blocks, TXs, Active Credentials).
 
 **Narration:**
-> "TrustProfile demonstrates six layers of protection: digital signatures, hash chain linkage, Merkle Trees, issuer registry, replay detection, and Proof of Work. Each layer is independent — an attacker would need to defeat all of them simultaneously. This is an educational simulation: all data is in memory, the network uses in-process queues rather than real sockets, and consensus is simplified. But the core mechanisms are the same ones used by real blockchains like Bitcoin and Ethereum. Thank you for watching."
+> "TRUSTMEBRO demonstrates six layers of protection: digital signatures, hash chain linkage, Merkle Trees, issuer registry, replay detection, and Proof of Work. Each layer is independent — an attacker would need to defeat all of them simultaneously. This is an educational simulation: all data is in memory, the network uses in-process queues rather than real sockets, and consensus is simplified. But the core mechanisms are the same ones used by real blockchains like Bitcoin and Ethereum. Thank you for watching."
 
 **Expected result:** Summary table visible, Dashboard shows non-zero metrics reflecting the demo activity.
 
